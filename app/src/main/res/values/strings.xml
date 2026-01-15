@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Amua Audio Downloader</string>
+    <string name="scan">Scan</string>
+    <string name="stop_scan">Stop Scan</string>
+    <string name="connect">Connect</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="start_stream">Start Stream</string>
+    <string name="stop_stream">Stop Stream</string>
+    <string name="save_recording">Save Recording</string>
+    <string name="status_disconnected">Disconnected</string>
+    <string name="status_scanning">Scanning...</string>
+    <string name="status_connecting">Connecting...</string>
+    <string name="status_connected">Connected</string>
+    <string name="status_streaming">Streaming...</string>
+    <string name="no_device_selected">No device selected</string>
+    <string name="samples_received">Samples: %d</string>
+    <string name="packets_received">Packets: %d</string>
+    <string name="recording_duration">Duration: %.1f s</string>
+</resources>

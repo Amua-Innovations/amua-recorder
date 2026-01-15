@@ -1,0 +1,10 @@
+[
+    {
+        "merged": "com.amua.audiodownloader.app-mergeDebugResources-35:/layout/activity_main.xml",
+        "source": "com.amua.audiodownloader.app-main-38:/layout/activity_main.xml"
+    },
+    {
+        "merged": "com.amua.audiodownloader.app-mergeDebugResources-35:/layout/item_device.xml",
+        "source": "com.amua.audiodownloader.app-main-38:/layout/item_device.xml"
+    }
+]

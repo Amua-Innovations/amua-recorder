@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Microphone icon representing audio recording -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,30c-5.5,0 -10,4.5 -10,10v18c0,5.5 4.5,10 10,10s10,-4.5 10,-10v-18c0,-5.5 -4.5,-10 -10,-10zM66,58c0,6.6 -5.4,12 -12,12s-12,-5.4 -12,-12h-4c0,8.3 6.3,15.1 14,15.9V80h4v-6.1c7.7,-0.8 14,-7.6 14,-15.9h-4z"/>
+    <!-- BLE/Bluetooth waves -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M75,54l-4,-4l4,-4l4,4l-4,4zM33,54l4,-4l-4,-4l-4,4l4,4z"
+        android:fillAlpha="0.6"/>
+</vector>

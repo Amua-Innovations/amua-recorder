@@ -1,0 +1,7 @@
+com.amua.audiodownloader.test.app-annotation-experimental-1.3.0-0 /home/charlie/.gradle/caches/8.13/transforms/7bceadc0e36b3d3eb5ddcda64bcd99c8/transformed/annotation-experimental-1.3.0/res
+com.amua.audiodownloader.test.app-core-1.5.0-1 /home/charlie/.gradle/caches/8.13/transforms/9a5540902afc1e9151eda0c8a8b308b1/transformed/core-1.5.0/res
+com.amua.audiodownloader.test.app-androidTest-2 /home/charlie/amua/audio_downloader_app/app/build/generated/res/resValues/androidTest/debug
+com.amua.audiodownloader.test.app-updated_navigation_xml-3 /home/charlie/amua/audio_downloader_app/app/build/generated/updated_navigation_xml/debugAndroidTest
+com.amua.audiodownloader.test.app-mergeDebugAndroidTestResources-4 /home/charlie/amua/audio_downloader_app/app/build/intermediates/incremental/debugAndroidTest/mergeDebugAndroidTestResources/merged.dir
+com.amua.audiodownloader.test.app-mergeDebugAndroidTestResources-5 /home/charlie/amua/audio_downloader_app/app/build/intermediates/incremental/debugAndroidTest/mergeDebugAndroidTestResources/stripped.dir
+com.amua.audiodownloader.test.app-debugAndroidTest-6 /home/charlie/amua/audio_downloader_app/app/build/intermediates/merged_res/debugAndroidTest/mergeDebugAndroidTestResources
