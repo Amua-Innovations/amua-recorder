@@ -33,15 +33,30 @@ class SessionManager(private val context: Context) {
      * Get the current active session, creating one if none exists.
      */
     fun getCurrentSession(): Session {
-        _currentSession?.let { return it }
+        _currentSession?.let { session ->
+            // Apply custom name if set
+            val customName = getSessionName(session.id)
+            return if (customName != null && session.name != customName) {
+                val updated = session.copy(name = customName)
+                _currentSession = updated
+                updated
+            } else {
+                session
+            }
+        }
 
         // Try to restore from preferences
         val savedSessionId = prefs.getString(KEY_CURRENT_SESSION_ID, null)
         if (savedSessionId != null) {
             val sessionDir = File(baseDirectory, savedSessionId)
             if (sessionDir.exists()) {
-                val session = Session.fromDirectory(sessionDir)
+                var session = Session.fromDirectory(sessionDir)
                 if (session != null) {
+                    // Apply custom name if set
+                    val customName = getSessionName(session.id)
+                    if (customName != null) {
+                        session = session.copy(name = customName)
+                    }
                     _currentSession = session
                     Log.i(TAG, "Restored session: ${session.id}")
                     return session
@@ -72,9 +87,17 @@ class SessionManager(private val context: Context) {
      */
     fun getAllSessions(): List<Session> {
         val dirs = baseDirectory.listFiles { file -> file.isDirectory }
-        return dirs?.mapNotNull { Session.fromDirectory(it) }
-            ?.sortedByDescending { it.createdAt }
-            ?: emptyList()
+        return dirs?.mapNotNull { dir ->
+            Session.fromDirectory(dir)?.let { session ->
+                // Apply custom name if set
+                val customName = getSessionName(session.id)
+                if (customName != null) {
+                    session.copy(name = customName)
+                } else {
+                    session
+                }
+            }
+        }?.sortedByDescending { it.createdAt } ?: emptyList()
     }
 
     /**
@@ -114,5 +137,52 @@ class SessionManager(private val context: Context) {
         } else {
             null
         }
+    }
+
+    /**
+     * Switch to an existing session, making it the current session.
+     */
+    fun setCurrentSession(session: Session): Boolean {
+        if (!session.directory.exists()) {
+            Log.e(TAG, "Session directory does not exist: ${session.id}")
+            return false
+        }
+
+        _currentSession = session
+        prefs.edit().putString(KEY_CURRENT_SESSION_ID, session.id).apply()
+        Log.i(TAG, "Switched to session: ${session.id}")
+        return true
+    }
+
+    /**
+     * Rename a session.
+     * Note: This only changes the display name, not the folder name.
+     */
+    fun renameSession(session: Session, newName: String): Session? {
+        if (newName.isBlank()) {
+            Log.e(TAG, "New name cannot be blank")
+            return null
+        }
+
+        // Create updated session with new name
+        val renamedSession = session.copy(name = newName.trim())
+
+        // Save the name mapping to preferences
+        prefs.edit().putString("session_name_${session.id}", newName.trim()).apply()
+
+        // Update current session if it's the one being renamed
+        if (_currentSession?.id == session.id) {
+            _currentSession = renamedSession
+        }
+
+        Log.i(TAG, "Renamed session ${session.id} to: $newName")
+        return renamedSession
+    }
+
+    /**
+     * Get the custom name for a session, if set.
+     */
+    fun getSessionName(sessionId: String): String? {
+        return prefs.getString("session_name_$sessionId", null)
     }
 }

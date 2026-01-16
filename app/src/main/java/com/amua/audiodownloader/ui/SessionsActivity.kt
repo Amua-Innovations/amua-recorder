@@ -2,6 +2,7 @@ package com.amua.audiodownloader.ui
 
 import android.os.Bundle
 import android.view.View
+import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -64,6 +65,8 @@ class SessionsActivity : AppCompatActivity() {
     private fun setupRecyclerView() {
         adapter = SessionAdapter(
             currentSessionId = sessionManager.getCurrentSession().id,
+            onSelectClick = { session -> selectSession(session) },
+            onEditClick = { session -> showEditDialog(session) },
             onShareClick = { session -> shareSession(session) },
             onDeleteClick = { session -> confirmDeleteSession(session) }
         )
@@ -91,6 +94,46 @@ class SessionsActivity : AppCompatActivity() {
             binding.emptyStateText.visibility = View.GONE
             adapter.submitList(sessions)
             adapter.updateCurrentSession(sessionManager.getCurrentSession().id)
+        }
+    }
+
+    private fun selectSession(session: Session) {
+        val success = sessionManager.setCurrentSession(session)
+        if (success) {
+            Toast.makeText(this, "Switched to ${session.name}", Toast.LENGTH_SHORT).show()
+            loadSessions()
+        } else {
+            Toast.makeText(this, "Failed to switch session", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showEditDialog(session: Session) {
+        val editText = EditText(this).apply {
+            setText(session.name)
+            setSelection(text.length) // Move cursor to end
+            setPadding(48, 32, 48, 32)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Rename Session")
+            .setView(editText)
+            .setPositiveButton("Save") { _, _ ->
+                val newName = editText.text.toString().trim()
+                if (newName.isNotBlank()) {
+                    renameSession(session, newName)
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun renameSession(session: Session, newName: String) {
+        val renamed = sessionManager.renameSession(session, newName)
+        if (renamed != null) {
+            Toast.makeText(this, "Session renamed", Toast.LENGTH_SHORT).show()
+            loadSessions()
+        } else {
+            Toast.makeText(this, "Failed to rename session", Toast.LENGTH_SHORT).show()
         }
     }
 
