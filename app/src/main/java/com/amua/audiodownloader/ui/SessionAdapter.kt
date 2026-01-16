@@ -85,10 +85,12 @@ class SessionAdapter(
 
             // Disable share if no recordings
             shareButton.isEnabled = count > 0
+            shareButton.alpha = if (count > 0) 1.0f else 0.4f
             shareButton.setOnClickListener { onShareClick(session) }
 
             // Disable delete for current session
             deleteButton.isEnabled = !isCurrent
+            deleteButton.alpha = if (!isCurrent) 1.0f else 0.4f
             deleteButton.setOnClickListener { onDeleteClick(session) }
         }
     }
