@@ -1,6 +1,7 @@
 package com.amua.audiodownloader.ui
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -17,11 +18,10 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.amua.audiodownloader.R
 import com.amua.audiodownloader.databinding.ActivityMainBinding
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /**
- * Main activity for the Amua Audio Downloader app.
+ * Main activity for AmuaRecorder.
  * Handles BLE scanning, connection, streaming, and recording.
  */
 class MainActivity : AppCompatActivity() {
@@ -106,6 +106,10 @@ class MainActivity : AppCompatActivity() {
         binding.saveButton.setOnClickListener {
             showSaveDialog()
         }
+
+        binding.sessionsButton.setOnClickListener {
+            startActivity(Intent(this, SessionsActivity::class.java))
+        }
     }
 
     private fun observeState() {
@@ -135,6 +139,7 @@ class MainActivity : AppCompatActivity() {
                         updateConnectionUi(state)
                         updateStreamingUi(state)
                         updateRecordingStats(state)
+                        updateSessionUi(state)
                         handleMessages(state)
                     }
                 }
@@ -207,6 +212,17 @@ class MainActivity : AppCompatActivity() {
         binding.saveButton.isEnabled = state.sampleCount > 0 && !state.isStreaming
     }
 
+    private fun updateSessionUi(state: UiState) {
+        state.currentSession?.let { session ->
+            binding.sessionNameText.text = session.name
+            val count = session.getRecordingCount()
+            binding.sessionInfoText.text = "$count recording${if (count != 1) "s" else ""} • ${session.getFormattedSize()}"
+        } ?: run {
+            binding.sessionNameText.text = "No session"
+            binding.sessionInfoText.text = ""
+        }
+    }
+
     private fun handleMessages(state: UiState) {
         state.errorMessage?.let { message ->
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
@@ -250,6 +266,12 @@ class MainActivity : AppCompatActivity() {
         } else {
             permissionLauncher.launch(missingPermissions.toTypedArray())
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Refresh session info when returning from SessionsActivity
+        viewModel.refreshSession()
     }
 
     override fun onStop() {
