@@ -9,6 +9,8 @@ import com.amua.audiodownloader.audio.WavFileWriter
 import com.amua.audiodownloader.ble.AmuaBleManager
 import com.amua.audiodownloader.ble.BleScanner
 import com.amua.audiodownloader.ble.ScannedDevice
+import com.amua.audiodownloader.session.Session
+import com.amua.audiodownloader.session.SessionManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -36,8 +38,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val audioDataHandler = AudioDataHandler()
     private val wavFileWriter = WavFileWriter(application)
 
+    // Session management
+    private val sessionManager = SessionManager(application)
+
     // UI State
-    private val _uiState = MutableStateFlow(UiState())
+    private val _uiState = MutableStateFlow(UiState(
+        currentSession = sessionManager.getCurrentSession()
+    ))
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
     // Discovered devices
@@ -185,16 +192,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         var savedFile: File? = null
+        val sessionDir = sessionManager.getCurrentSessionDirectory()
 
         viewModelScope.launch {
             savedFile = withContext(Dispatchers.IO) {
-                wavFileWriter.saveToFile(samples, filename = filename)
+                wavFileWriter.saveToFile(
+                    samples = samples,
+                    filename = filename,
+                    outputDirectory = sessionDir
+                )
             }
 
             if (savedFile != null) {
                 _uiState.value = _uiState.value.copy(
                     lastSavedFile = savedFile,
-                    successMessage = "Saved to ${savedFile?.name}"
+                    successMessage = "Saved to ${savedFile?.name}",
+                    currentSession = sessionManager.getCurrentSession() // Refresh session info
                 )
             } else {
                 _uiState.value = _uiState.value.copy(
@@ -204,6 +217,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         return savedFile
+    }
+
+    // Session functions
+    fun createNewSession() {
+        val newSession = sessionManager.createNewSession()
+        _uiState.value = _uiState.value.copy(
+            currentSession = newSession,
+            successMessage = "New session started"
+        )
+    }
+
+    fun refreshSession() {
+        _uiState.value = _uiState.value.copy(
+            currentSession = sessionManager.getCurrentSession()
+        )
     }
 
     fun clearRecording() {
@@ -256,5 +284,6 @@ data class UiState(
     val recordingDuration: Float = 0f,
     val lastSavedFile: File? = null,
     val errorMessage: String? = null,
-    val successMessage: String? = null
+    val successMessage: String? = null,
+    val currentSession: Session? = null
 )

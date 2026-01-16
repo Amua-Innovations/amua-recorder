@@ -31,6 +31,7 @@ class WavFileWriter(private val context: Context) {
      * @param numChannels Number of audio channels (1 for mono)
      * @param bitsPerSample Bits per sample (16)
      * @param filename Optional filename (without extension). If null, generates timestamp-based name.
+     * @param outputDirectory Optional output directory. If null, uses default directory.
      * @return The File object if successful, null otherwise.
      */
     fun saveToFile(
@@ -38,7 +39,8 @@ class WavFileWriter(private val context: Context) {
         sampleRate: Int = AudioDataHandler.SAMPLE_RATE,
         numChannels: Int = AudioDataHandler.NUM_CHANNELS,
         bitsPerSample: Int = AudioDataHandler.BITS_PER_SAMPLE,
-        filename: String? = null
+        filename: String? = null,
+        outputDirectory: File? = null
     ): File? {
         if (samples.isEmpty()) {
             Log.w(TAG, "No samples to save")
@@ -46,7 +48,11 @@ class WavFileWriter(private val context: Context) {
         }
 
         val actualFilename = filename ?: generateFilename()
-        val file = getOutputFile(actualFilename)
+        val dir = outputDirectory ?: getOutputDirectory()
+        if (!dir.exists()) {
+            dir.mkdirs()
+        }
+        val file = File(dir, "$actualFilename.wav")
 
         return try {
             FileOutputStream(file).use { fos ->
