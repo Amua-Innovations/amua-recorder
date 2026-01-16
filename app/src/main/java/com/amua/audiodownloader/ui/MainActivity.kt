@@ -21,7 +21,7 @@ import com.amua.audiodownloader.databinding.ActivityMainBinding
 import kotlinx.coroutines.launch
 
 /**
- * Main activity for the Amua Audio Downloader app.
+ * Main activity for AmuaRecorder.
  * Handles BLE scanning, connection, streaming, and recording.
  */
 class MainActivity : AppCompatActivity() {

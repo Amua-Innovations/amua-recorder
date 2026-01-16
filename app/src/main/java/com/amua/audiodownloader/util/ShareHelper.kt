@@ -73,7 +73,7 @@ class ShareHelper(private val context: Context) {
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "application/zip"
             putExtra(Intent.EXTRA_STREAM, contentUri)
-            putExtra(Intent.EXTRA_SUBJECT, "Amua Recordings - ${session.id}")
+            putExtra(Intent.EXTRA_SUBJECT, "AmuaRecorder - ${session.id}")
             putExtra(Intent.EXTRA_TEXT, "Session: ${session.id}\nRecordings: ${recordings.size}\nSize: ${session.getFormattedSize()}")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
