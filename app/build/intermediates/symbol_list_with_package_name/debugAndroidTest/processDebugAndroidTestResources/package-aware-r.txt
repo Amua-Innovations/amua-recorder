@@ -1,3 +1,0 @@
-com.amua.audiodownloader.test
-style WhiteBackgroundDialogTheme
-style WhiteBackgroundTheme
