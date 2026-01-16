@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="primary">#0077B6</color>
-    <color name="primary_dark">#005C8F</color>
-    <color name="accent">#00B4D8</color>
+    <color name="primary">#2d481f</color>
+    <color name="primary_dark">#1e3014</color>
+    <color name="accent">#cfe648</color>
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
     <color name="text_primary">#212121</color>
@@ -10,6 +10,6 @@
     <color name="background">#FAFAFA</color>
     <color name="surface">#FFFFFF</color>
     <color name="error">#B00020</color>
-    <color name="success">#4CAF50</color>
-    <color name="streaming">#FF9800</color>
+    <color name="success">#cfe648</color>
+    <color name="streaming">#cfe648</color>
 </resources>
