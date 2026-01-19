@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.amua.audiodownloader.audio.AudioDataHandler
+import com.amua.audiodownloader.audio.StreamingWavWriter
 import com.amua.audiodownloader.audio.WavFileWriter
 import com.amua.audiodownloader.ble.AmuaBleManager
 import com.amua.audiodownloader.ble.BleScanner
@@ -18,6 +19,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * ViewModel for the main screen, managing BLE connection and audio streaming state.
@@ -54,6 +58,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Streaming state
     private var streamStartTime: Long = 0
     private var isSkippingInitialData = false
+    private var streamingWriter: StreamingWavWriter? = null
+    private var currentRecordingFile: File? = null
 
     init {
         setupBleCallbacks()
@@ -151,6 +157,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         streamStartTime = System.currentTimeMillis()
         isSkippingInitialData = true
 
+        // Set up streaming writer for direct-to-file recording
+        val sessionDir = sessionManager.getCurrentSessionDirectory()
+        if (!sessionDir.exists()) {
+            sessionDir.mkdirs()
+        }
+        val filename = generateFilename()
+        currentRecordingFile = File(sessionDir, "$filename.wav")
+        streamingWriter = StreamingWavWriter(currentRecordingFile!!).also { writer ->
+            if (!writer.open()) {
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = "Failed to create recording file"
+                )
+                return
+            }
+        }
+
+        // Set up callback to stream samples directly to file
+        audioDataHandler.setSampleCallback { samples ->
+            streamingWriter?.writeSamples(samples)
+        }
+
         _uiState.value = _uiState.value.copy(
             sampleCount = 0,
             packetCount = 0,
@@ -162,6 +189,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (success) {
                     _uiState.value = _uiState.value.copy(isStreaming = true)
                 } else {
+                    // Clean up streaming writer on failure
+                    streamingWriter?.close()
+                    streamingWriter = null
+                    audioDataHandler.setSampleCallback(null)
                     _uiState.value = _uiState.value.copy(
                         errorMessage = "Failed to start stream"
                     )
@@ -170,9 +201,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun generateFilename(): String {
+        val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
+        return "amua_recording_${dateFormat.format(Date())}"
+    }
+
     fun stopStream() {
         bleManager.stopStream { success ->
             viewModelScope.launch {
+                // Close streaming writer and finalize the WAV file
+                audioDataHandler.setSampleCallback(null)
+                streamingWriter?.close()
+                streamingWriter = null
+
                 _uiState.value = _uiState.value.copy(isStreaming = false)
                 if (!success) {
                     Log.w(TAG, "Failed to send stop command")
@@ -183,38 +224,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // Recording functions
     fun saveRecording(filename: String? = null): File? {
-        val samples = audioDataHandler.getSamples()
-        if (samples.isEmpty()) {
+        // With streaming mode, the file is already saved during recording
+        val savedFile = currentRecordingFile
+
+        if (savedFile == null || !savedFile.exists() || audioDataHandler.getSampleCount() == 0) {
             _uiState.value = _uiState.value.copy(
                 errorMessage = "No audio data to save"
             )
             return null
         }
 
-        var savedFile: File? = null
-        val sessionDir = sessionManager.getCurrentSessionDirectory()
-
-        viewModelScope.launch {
-            savedFile = withContext(Dispatchers.IO) {
-                wavFileWriter.saveToFile(
-                    samples = samples,
-                    filename = filename,
-                    outputDirectory = sessionDir
-                )
-            }
-
-            if (savedFile != null) {
+        // If a custom filename was provided, rename the file
+        if (filename != null) {
+            val newFile = File(savedFile.parent, "$filename.wav")
+            if (savedFile.renameTo(newFile)) {
+                currentRecordingFile = newFile
                 _uiState.value = _uiState.value.copy(
-                    lastSavedFile = savedFile,
-                    successMessage = "Saved to ${savedFile?.name}",
-                    currentSession = sessionManager.getCurrentSession() // Refresh session info
+                    lastSavedFile = newFile,
+                    successMessage = "Saved to ${newFile.name}",
+                    currentSession = sessionManager.getCurrentSession()
                 )
-            } else {
-                _uiState.value = _uiState.value.copy(
-                    errorMessage = "Failed to save recording"
-                )
+                return newFile
             }
         }
+
+        _uiState.value = _uiState.value.copy(
+            lastSavedFile = savedFile,
+            successMessage = "Saved to ${savedFile.name}",
+            currentSession = sessionManager.getCurrentSession()
+        )
 
         return savedFile
     }
@@ -235,6 +273,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearRecording() {
+        // Clean up streaming writer if active
+        audioDataHandler.setSampleCallback(null)
+        streamingWriter?.close()
+        streamingWriter = null
+
+        // Delete the current recording file if it exists
+        currentRecordingFile?.let { file ->
+            if (file.exists()) {
+                file.delete()
+            }
+        }
+        currentRecordingFile = null
+
         audioDataHandler.clear()
         _uiState.value = _uiState.value.copy(
             sampleCount = 0,
@@ -259,6 +310,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (_uiState.value.isStreaming) {
             bleManager.stopStream(null)
         }
+        // Clean up streaming writer
+        audioDataHandler.setSampleCallback(null)
+        streamingWriter?.close()
+        streamingWriter = null
         bleManager.disconnectDevice()
     }
 }

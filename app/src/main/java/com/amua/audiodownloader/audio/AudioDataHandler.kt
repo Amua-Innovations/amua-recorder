@@ -13,6 +13,9 @@ import java.nio.ByteOrder
  *
  * Note: The Python script uses bytes[1:243] which suggests there might be
  * an offset. We'll handle both formats by detecting packet structure.
+ *
+ * This handler supports streaming mode where samples are passed to a callback
+ * for immediate file writing instead of accumulating in memory.
  */
 class AudioDataHandler {
 
@@ -27,9 +30,20 @@ class AudioDataHandler {
         private const val BYTES_PER_SAMPLE = 2
     }
 
-    private val audioSamples = mutableListOf<Short>()
     private var packetCount = 0
+    private var totalSampleCount = 0
     private var lastSequenceNumber: Int = -1
+
+    // Callback for streaming samples directly to file
+    private var sampleCallback: ((ShortArray) -> Unit)? = null
+
+    /**
+     * Set a callback to receive samples for streaming to file.
+     * When set, samples are passed to this callback instead of being stored in memory.
+     */
+    fun setSampleCallback(callback: ((ShortArray) -> Unit)?) {
+        sampleCallback = callback
+    }
 
     /**
      * Process an incoming audio data packet.
@@ -47,7 +61,7 @@ class AudioDataHandler {
         val sequenceNumber = buffer.short.toInt() and 0xFFFF
 
         // Check for sequence gaps
-        if (lastSequenceNumber >= 0 && sequenceNumber != (lastSequenceNumber + 1) and 0xFFFF) {
+        if (lastSequenceNumber >= 0 && sequenceNumber != ((lastSequenceNumber + 1) and 0xFFFF)) {
             val gap = if (sequenceNumber > lastSequenceNumber) {
                 sequenceNumber - lastSequenceNumber - 1
             } else {
@@ -71,29 +85,29 @@ class AudioDataHandler {
             val sampleBuffer = ByteBuffer.wrap(data, sampleStartOffset, numSamples * BYTES_PER_SAMPLE)
                 .order(ByteOrder.LITTLE_ENDIAN)
 
+            val samples = ShortArray(numSamples)
             for (i in 0 until numSamples) {
-                audioSamples.add(sampleBuffer.short)
+                samples[i] = sampleBuffer.short
             }
+
+            // Pass samples to callback for streaming, or just count them
+            sampleCallback?.invoke(samples)
+            totalSampleCount += numSamples
         }
 
         packetCount++
 
         if (packetCount % 100 == 0) {
-            Log.d(TAG, "Processed $packetCount packets, ${audioSamples.size} total samples")
+            Log.d(TAG, "Processed $packetCount packets, $totalSampleCount total samples")
         }
 
         return numSamples
     }
 
     /**
-     * Get the current audio samples as a ShortArray.
-     */
-    fun getSamples(): ShortArray = audioSamples.toShortArray()
-
-    /**
      * Get the current sample count.
      */
-    fun getSampleCount(): Int = audioSamples.size
+    fun getSampleCount(): Int = totalSampleCount
 
     /**
      * Get the current packet count.
@@ -103,14 +117,14 @@ class AudioDataHandler {
     /**
      * Get the recording duration in seconds.
      */
-    fun getDurationSeconds(): Float = audioSamples.size.toFloat() / SAMPLE_RATE
+    fun getDurationSeconds(): Float = totalSampleCount.toFloat() / SAMPLE_RATE
 
     /**
      * Clear all stored audio data.
      */
     fun clear() {
-        audioSamples.clear()
         packetCount = 0
+        totalSampleCount = 0
         lastSequenceNumber = -1
         Log.i(TAG, "Audio data cleared")
     }

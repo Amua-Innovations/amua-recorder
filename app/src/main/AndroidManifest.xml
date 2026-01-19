@@ -17,6 +17,12 @@
         android:name="android.hardware.bluetooth_le"
         android:required="true" />
 
+    <!-- Internet for update checking -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Install packages for in-app updates -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <application
         android:name=".AudioDownloaderApp"
         android:allowBackup="true"

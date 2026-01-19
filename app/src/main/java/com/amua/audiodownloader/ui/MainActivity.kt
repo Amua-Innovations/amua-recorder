@@ -3,8 +3,12 @@ package com.amua.audiodownloader.ui
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
+import android.view.Menu
+import android.view.MenuItem
 import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -18,6 +22,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.amua.audiodownloader.R
 import com.amua.audiodownloader.databinding.ActivityMainBinding
+import com.amua.audiodownloader.util.UpdateManager
 import kotlinx.coroutines.launch
 
 /**
@@ -29,6 +34,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private val viewModel: MainViewModel by viewModels()
     private lateinit var deviceAdapter: DeviceAdapter
+    private lateinit var updateManager: UpdateManager
 
     private val requiredPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         arrayOf(
@@ -63,9 +69,32 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        updateManager = UpdateManager(this)
+
+        // Set up toolbar with menu
+        setSupportActionBar(binding.toolbar)
+
         setupRecyclerView()
         setupButtons()
         observeState()
+
+        // Check for updates on app launch
+        checkForUpdates()
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.menu_main, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_check_updates -> {
+                manualCheckForUpdates()
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
     }
 
     private fun setupRecyclerView() {
@@ -277,5 +306,103 @@ class MainActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
         viewModel.stopScan()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        updateManager.cleanup()
+    }
+
+    private fun checkForUpdates() {
+        lifecycleScope.launch {
+            val result = updateManager.checkForUpdates(isManualCheck = false)
+            if (result.updateInfo != null) {
+                showUpdateDialog(result.updateInfo)
+            }
+        }
+    }
+
+    private fun manualCheckForUpdates() {
+        lifecycleScope.launch {
+            Toast.makeText(this@MainActivity, "Checking for updates...", Toast.LENGTH_SHORT).show()
+
+            val result = updateManager.checkForUpdates(isManualCheck = true)
+
+            when {
+                result.wasRateLimited -> {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Please wait ${result.minutesUntilNextCheck} minutes before checking again",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                result.updateInfo != null -> {
+                    showUpdateDialog(result.updateInfo)
+                }
+                else -> {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "You're on the latest version",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
+    }
+
+    private fun showUpdateDialog(updateInfo: UpdateManager.UpdateInfo) {
+        val sizeText = updateManager.formatSize(updateInfo.apkSize)
+
+        AlertDialog.Builder(this)
+            .setTitle("Update Available")
+            .setMessage(
+                "A new version of AmuaRecorder is available!\n\n" +
+                "Version: ${updateInfo.versionName}\n" +
+                "Size: $sizeText\n\n" +
+                "What's new:\n${updateInfo.releaseNotes.take(500)}"
+            )
+            .setPositiveButton("Update Now") { _, _ ->
+                startUpdate(updateInfo)
+            }
+            .setNegativeButton("Later", null)
+            .setNeutralButton("Skip Version") { _, _ ->
+                updateManager.skipVersion(updateInfo.versionName)
+            }
+            .setCancelable(true)
+            .show()
+    }
+
+    private fun startUpdate(updateInfo: UpdateManager.UpdateInfo) {
+        // Check if we can install packages
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (!packageManager.canRequestPackageInstalls()) {
+                // Request permission to install packages
+                AlertDialog.Builder(this)
+                    .setTitle("Permission Required")
+                    .setMessage("To install updates, please allow AmuaRecorder to install apps from this source.")
+                    .setPositiveButton("Open Settings") { _, _ ->
+                        val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                            data = Uri.parse("package:$packageName")
+                        }
+                        startActivity(intent)
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+                return
+            }
+        }
+
+        Toast.makeText(this, "Downloading update...", Toast.LENGTH_SHORT).show()
+
+        updateManager.downloadAndInstall(
+            updateInfo,
+            onComplete = { success ->
+                runOnUiThread {
+                    if (!success) {
+                        Toast.makeText(this, "Download failed. Please try again.", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        )
     }
 }
