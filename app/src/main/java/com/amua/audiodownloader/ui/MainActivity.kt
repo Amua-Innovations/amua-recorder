@@ -136,6 +136,10 @@ class MainActivity : AppCompatActivity() {
             showSaveDialog()
         }
 
+        binding.discardButton.setOnClickListener {
+            showDiscardConfirmation()
+        }
+
         binding.sessionsButton.setOnClickListener {
             startActivity(Intent(this, SessionsActivity::class.java))
         }
@@ -237,8 +241,10 @@ class MainActivity : AppCompatActivity() {
         binding.packetCountText.text = state.packetCount.toString()
         binding.durationText.text = String.format("%.1f s", state.recordingDuration)
 
-        // Enable save button if we have recorded data
-        binding.saveButton.isEnabled = state.sampleCount > 0 && !state.isStreaming
+        // Enable save/discard buttons if we have recorded data
+        val hasRecording = state.sampleCount > 0 && !state.isStreaming
+        binding.saveButton.isEnabled = hasRecording
+        binding.discardButton.isEnabled = hasRecording
     }
 
     private fun updateSessionUi(state: UiState) {
@@ -279,9 +285,18 @@ class MainActivity : AppCompatActivity() {
                 viewModel.saveRecording(filename)
             }
             .setNegativeButton("Cancel", null)
-            .setNeutralButton("Clear") { _, _ ->
+            .show()
+    }
+
+    private fun showDiscardConfirmation() {
+        AlertDialog.Builder(this)
+            .setTitle("Discard Recording")
+            .setMessage("Discard ${viewModel.uiState.value.sampleCount} samples? This cannot be undone.")
+            .setPositiveButton("Discard") { _, _ ->
                 viewModel.clearRecording()
+                Toast.makeText(this, "Recording discarded", Toast.LENGTH_SHORT).show()
             }
+            .setNegativeButton("Cancel", null)
             .show()
     }
 
