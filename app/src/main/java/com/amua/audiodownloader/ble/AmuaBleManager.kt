@@ -19,7 +19,7 @@ class AmuaBleManager(context: Context) : BleManager(context) {
         private const val TAG = "AmuaBleManager"
 
         // Audio characteristic UUID from the embedded device
-        val AUDIO_CHAR_UUID: UUID = UUID.fromString("12345678-1234-5678-1234-56789abcdef7")
+        val AUDIO_CHAR_UUID: UUID = UUID.fromString("AC570007-D569-BFA9-2713-0000E3F7F6F4")
 
         // Commands
         const val CMD_START_STREAM: Byte = 0x01
