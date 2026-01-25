@@ -51,7 +51,8 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          ./gradlew assembleRelease --build-cache --parallel -x lint -x test
+          VERSION=${GITHUB_REF#refs/tags/}
+          ./gradlew assembleRelease --build-cache --parallel -x lint -x test -PVERSION_NAME="$VERSION"
           mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/AmuaRecorder.apk
 
       - name: Create Release
