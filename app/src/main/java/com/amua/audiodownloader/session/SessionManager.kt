@@ -2,12 +2,14 @@ package com.amua.audiodownloader.session
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.os.Environment
 import android.util.Log
-import java.io.File
+import com.amua.audiodownloader.util.MediaStoreManager
+import java.util.Date
 
 /**
  * Manages recording sessions - creation, persistence, and retrieval.
+ * Session metadata is stored in SharedPreferences.
+ * Recordings are stored in MediaStore and persist after app uninstall.
  */
 class SessionManager(private val context: Context) {
 
@@ -15,17 +17,13 @@ class SessionManager(private val context: Context) {
         private const val TAG = "SessionManager"
         private const val PREFS_NAME = "session_prefs"
         private const val KEY_CURRENT_SESSION_ID = "current_session_id"
+        private const val KEY_SESSION_IDS = "session_ids"
+        private const val PREFIX_SESSION_NAME = "session_name_"
+        private const val PREFIX_SESSION_CREATED = "session_created_"
     }
 
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    private val baseDirectory: File
-        get() {
-            val dir = File(context.getExternalFilesDir(Environment.DIRECTORY_MUSIC), "AmuaRecordings")
-            if (!dir.exists()) {
-                dir.mkdirs()
-            }
-            return dir
-        }
+    private val mediaStoreManager = MediaStoreManager(context)
 
     private var _currentSession: Session? = null
 
@@ -56,19 +54,11 @@ class SessionManager(private val context: Context) {
 
         // Try to restore from preferences
         if (savedSessionId != null) {
-            val sessionDir = File(baseDirectory, savedSessionId)
-            if (sessionDir.exists()) {
-                var session = Session.fromDirectory(sessionDir)
-                if (session != null) {
-                    // Apply custom name if set
-                    val customName = getSessionName(session.id)
-                    if (customName != null) {
-                        session = session.copy(name = customName)
-                    }
-                    _currentSession = session
-                    Log.i(TAG, "Restored session: ${session.id}")
-                    return session
-                }
+            val session = loadSession(savedSessionId)
+            if (session != null) {
+                _currentSession = session
+                Log.i(TAG, "Restored session: ${session.id}")
+                return session
             }
         }
 
@@ -80,10 +70,11 @@ class SessionManager(private val context: Context) {
      * Create a new session, ending the current one.
      */
     fun createNewSession(): Session {
-        val session = Session.create(baseDirectory)
+        val session = Session.create()
         _currentSession = session
 
-        // Save to preferences
+        // Save session metadata
+        saveSessionMetadata(session)
         prefs.edit().putString(KEY_CURRENT_SESSION_ID, session.id).apply()
 
         Log.i(TAG, "Created new session: ${session.id}")
@@ -94,25 +85,15 @@ class SessionManager(private val context: Context) {
      * Get all sessions, sorted by creation date (newest first).
      */
     fun getAllSessions(): List<Session> {
-        val dirs = baseDirectory.listFiles { file -> file.isDirectory }
-        return dirs?.mapNotNull { dir ->
-            Session.fromDirectory(dir)?.let { session ->
-                // Apply custom name if set
-                val customName = getSessionName(session.id)
-                if (customName != null) {
-                    session.copy(name = customName)
-                } else {
-                    session
-                }
-            }
-        }?.sortedByDescending { it.createdAt } ?: emptyList()
-    }
+        val sessionIds = getStoredSessionIds()
+        val mediaStoreSessionIds = mediaStoreManager.getAllSessionIds()
 
-    /**
-     * Get the directory for storing recordings in the current session.
-     */
-    fun getCurrentSessionDirectory(): File {
-        return getCurrentSession().directory
+        // Combine session IDs from preferences and MediaStore
+        val allIds = sessionIds + mediaStoreSessionIds
+
+        return allIds.mapNotNull { id -> loadSession(id) }
+            .distinctBy { it.id }
+            .sortedByDescending { it.createdAt }
     }
 
     /**
@@ -120,14 +101,19 @@ class SessionManager(private val context: Context) {
      */
     fun deleteSession(session: Session): Boolean {
         return try {
-            session.directory.deleteRecursively()
-            Log.i(TAG, "Deleted session: ${session.id}")
+            // Delete recordings from MediaStore
+            mediaStoreManager.deleteSession(session.id)
+
+            // Remove session metadata
+            removeSessionMetadata(session.id)
 
             // If we deleted the current session, clear it
             if (_currentSession?.id == session.id) {
                 _currentSession = null
                 prefs.edit().remove(KEY_CURRENT_SESSION_ID).apply()
             }
+
+            Log.i(TAG, "Deleted session: ${session.id}")
             true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to delete session: ${session.id}", e)
@@ -139,23 +125,13 @@ class SessionManager(private val context: Context) {
      * Get a session by ID.
      */
     fun getSession(sessionId: String): Session? {
-        val sessionDir = File(baseDirectory, sessionId)
-        return if (sessionDir.exists()) {
-            Session.fromDirectory(sessionDir)
-        } else {
-            null
-        }
+        return loadSession(sessionId)
     }
 
     /**
      * Switch to an existing session, making it the current session.
      */
     fun setCurrentSession(session: Session): Boolean {
-        if (!session.directory.exists()) {
-            Log.e(TAG, "Session directory does not exist: ${session.id}")
-            return false
-        }
-
         _currentSession = session
         prefs.edit().putString(KEY_CURRENT_SESSION_ID, session.id).apply()
         Log.i(TAG, "Switched to session: ${session.id}")
@@ -164,7 +140,6 @@ class SessionManager(private val context: Context) {
 
     /**
      * Rename a session.
-     * Note: This only changes the display name, not the folder name.
      */
     fun renameSession(session: Session, newName: String): Session? {
         if (newName.isBlank()) {
@@ -172,11 +147,10 @@ class SessionManager(private val context: Context) {
             return null
         }
 
-        // Create updated session with new name
         val renamedSession = session.copy(name = newName.trim())
 
         // Save the name mapping to preferences
-        prefs.edit().putString("session_name_${session.id}", newName.trim()).apply()
+        prefs.edit().putString("$PREFIX_SESSION_NAME${session.id}", newName.trim()).apply()
 
         // Update current session if it's the one being renamed
         if (_currentSession?.id == session.id) {
@@ -191,6 +165,59 @@ class SessionManager(private val context: Context) {
      * Get the custom name for a session, if set.
      */
     fun getSessionName(sessionId: String): String? {
-        return prefs.getString("session_name_$sessionId", null)
+        return prefs.getString("$PREFIX_SESSION_NAME$sessionId", null)
+    }
+
+    /**
+     * Load a session from stored metadata or MediaStore.
+     */
+    private fun loadSession(sessionId: String): Session? {
+        // Get custom name if set
+        val customName = getSessionName(sessionId)
+
+        // Get creation time from preferences or parse from ID
+        val createdAt = prefs.getLong("$PREFIX_SESSION_CREATED$sessionId", 0L).let {
+            if (it > 0) Date(it) else Session.parseCreatedAt(sessionId)
+        }
+
+        return Session(
+            id = sessionId,
+            name = customName ?: sessionId,
+            createdAt = createdAt
+        )
+    }
+
+    /**
+     * Save session metadata to preferences.
+     */
+    private fun saveSessionMetadata(session: Session) {
+        val sessionIds = getStoredSessionIds().toMutableSet()
+        sessionIds.add(session.id)
+
+        prefs.edit()
+            .putStringSet(KEY_SESSION_IDS, sessionIds)
+            .putLong("$PREFIX_SESSION_CREATED${session.id}", session.createdAt.time)
+            .apply()
+    }
+
+    /**
+     * Remove session metadata from preferences.
+     */
+    private fun removeSessionMetadata(sessionId: String) {
+        val sessionIds = getStoredSessionIds().toMutableSet()
+        sessionIds.remove(sessionId)
+
+        prefs.edit()
+            .putStringSet(KEY_SESSION_IDS, sessionIds)
+            .remove("$PREFIX_SESSION_NAME$sessionId")
+            .remove("$PREFIX_SESSION_CREATED$sessionId")
+            .apply()
+    }
+
+    /**
+     * Get stored session IDs from preferences.
+     */
+    private fun getStoredSessionIds(): Set<String> {
+        return prefs.getStringSet(KEY_SESSION_IDS, emptySet()) ?: emptySet()
     }
 }

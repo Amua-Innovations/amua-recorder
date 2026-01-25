@@ -19,6 +19,8 @@ class ShareHelper(private val context: Context) {
         private const val AUTHORITY = "com.amua.audiodownloader.fileprovider"
     }
 
+    private val mediaStoreManager = MediaStoreManager(context)
+
     // Track zip files that need to be deleted after sharing
     private val pendingCleanup = mutableSetOf<File>()
 
@@ -31,25 +33,50 @@ class ShareHelper(private val context: Context) {
      * @return The share intent, or null if failed
      */
     fun shareSession(session: Session, onError: ((String) -> Unit)? = null): Intent? {
-        val recordings = session.getRecordings()
+        val recordings = session.getRecordings(context)
         if (recordings.isEmpty()) {
             onError?.invoke("No recordings in this session")
             return null
         }
 
-        // Create zip file in cache directory (for FileProvider access)
-        val cacheDir = File(context.cacheDir, "share")
-        if (!cacheDir.exists()) {
-            cacheDir.mkdirs()
+        // Create temp directory for recordings
+        val tempDir = File(context.cacheDir, "share_temp/${session.id}")
+        if (tempDir.exists()) {
+            tempDir.deleteRecursively()
         }
-        val zipFile = File(cacheDir, "${session.id}.zip")
+        tempDir.mkdirs()
 
-        // Create the zip
+        // Copy recordings from MediaStore to temp directory
+        var copiedCount = 0
+        for (recording in recordings) {
+            val destFile = File(tempDir, recording.displayName)
+            if (mediaStoreManager.copyToFile(recording, destFile)) {
+                copiedCount++
+            }
+        }
+
+        if (copiedCount == 0) {
+            onError?.invoke("Failed to prepare recordings for sharing")
+            tempDir.deleteRecursively()
+            return null
+        }
+
+        // Create zip file in cache directory (for FileProvider access)
+        val zipCacheDir = File(context.cacheDir, "share")
+        if (!zipCacheDir.exists()) {
+            zipCacheDir.mkdirs()
+        }
+        val zipFile = File(zipCacheDir, "${session.id}.zip")
+
+        // Create the zip from temp directory
         val success = ZipUtils.zipDirectory(
-            sourceDirectory = session.directory,
+            sourceDirectory = tempDir,
             outputFile = zipFile,
             fileFilter = { it.extension == "wav" }
         )
+
+        // Clean up temp directory
+        tempDir.deleteRecursively()
 
         if (!success) {
             onError?.invoke("Failed to create zip file")
@@ -73,8 +100,8 @@ class ShareHelper(private val context: Context) {
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "application/zip"
             putExtra(Intent.EXTRA_STREAM, contentUri)
-            putExtra(Intent.EXTRA_SUBJECT, "AmuaRecorder - ${session.id}")
-            putExtra(Intent.EXTRA_TEXT, "Session: ${session.id}\nRecordings: ${recordings.size}\nSize: ${session.getFormattedSize()}")
+            putExtra(Intent.EXTRA_SUBJECT, "AmuaRecorder - ${session.name}")
+            putExtra(Intent.EXTRA_TEXT, "Session: ${session.name}\nRecordings: ${recordings.size}\nSize: ${session.getFormattedSize(context)}")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
 
@@ -110,6 +137,13 @@ class ShareHelper(private val context: Context) {
                 }
             }
         }
+
+        // Also clean up temp directories
+        val tempDir = File(context.cacheDir, "share_temp")
+        if (tempDir.exists()) {
+            tempDir.deleteRecursively()
+        }
+
         pendingCleanup.clear()
     }
 }

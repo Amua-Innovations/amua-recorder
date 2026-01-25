@@ -67,12 +67,13 @@ class SessionAdapter(
             onShareClick: (Session) -> Unit,
             onDeleteClick: (Session) -> Unit
         ) {
+            val context = itemView.context
             sessionName.text = session.name
             sessionDate.text = session.getFormattedDate()
 
-            val count = session.getRecordingCount()
+            val count = session.getRecordingCount(context)
             recordingCount.text = "$count recording${if (count != 1) "s" else ""}"
-            sessionSize.text = session.getFormattedSize()
+            sessionSize.text = session.getFormattedSize(context)
 
             currentBadge.visibility = if (isCurrent) View.VISIBLE else View.GONE
 
@@ -102,9 +103,10 @@ class SessionDiffCallback : DiffUtil.ItemCallback<Session>() {
     }
 
     override fun areContentsTheSame(oldItem: Session, newItem: Session): Boolean {
+        // Only compare properties that don't require context
+        // Recording count/size changes will be reflected when list is resubmitted
         return oldItem.id == newItem.id &&
                 oldItem.name == newItem.name &&
-                oldItem.getRecordingCount() == newItem.getRecordingCount() &&
-                oldItem.getTotalSizeBytes() == newItem.getTotalSizeBytes()
+                oldItem.createdAt == newItem.createdAt
     }
 }

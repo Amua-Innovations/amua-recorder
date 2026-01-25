@@ -162,7 +162,7 @@ class SessionsActivity : AppCompatActivity() {
     }
 
     private fun confirmDeleteSession(session: Session) {
-        val count = session.getRecordingCount()
+        val count = session.getRecordingCount(this)
         AlertDialog.Builder(this)
             .setTitle("Delete Session")
             .setMessage("Delete \"${session.name}\" and its $count recording${if (count != 1) "s" else ""}?\n\nThis cannot be undone.")

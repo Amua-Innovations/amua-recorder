@@ -275,8 +275,8 @@ class MainActivity : AppCompatActivity() {
     private fun updateSessionUi(state: UiState) {
         state.currentSession?.let { session ->
             binding.sessionNameText.text = session.name
-            val count = session.getRecordingCount()
-            binding.sessionInfoText.text = "$count recording${if (count != 1) "s" else ""} • ${session.getFormattedSize()}"
+            val count = session.getRecordingCount(this)
+            binding.sessionInfoText.text = "$count recording${if (count != 1) "s" else ""} • ${session.getFormattedSize(this)}"
         } ?: run {
             binding.sessionNameText.text = "No session"
             binding.sessionInfoText.text = ""

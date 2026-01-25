@@ -1,17 +1,18 @@
 package com.amua.audiodownloader.ui
 
 import android.app.Application
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.amua.audiodownloader.audio.AudioDataHandler
 import com.amua.audiodownloader.audio.StreamingWavWriter
-import com.amua.audiodownloader.audio.WavFileWriter
 import com.amua.audiodownloader.ble.AmuaBleManager
 import com.amua.audiodownloader.ble.BleScanner
 import com.amua.audiodownloader.ble.ScannedDevice
 import com.amua.audiodownloader.session.Session
 import com.amua.audiodownloader.session.SessionManager
+import com.amua.audiodownloader.util.MediaStoreManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,10 +41,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // Audio components
     private val audioDataHandler = AudioDataHandler()
-    private val wavFileWriter = WavFileWriter(application)
 
-    // Session management
+    // Session and storage management
     private val sessionManager = SessionManager(application)
+    private val mediaStoreManager = MediaStoreManager(application)
+
+    // Temp directory for recording before saving to MediaStore
+    private val tempRecordingDir: File = File(application.cacheDir, "recordings").apply {
+        if (!exists()) mkdirs()
+    }
 
     // UI State
     private val _uiState = MutableStateFlow(UiState(
@@ -60,6 +66,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var isSkippingInitialData = false
     private var streamingWriter: StreamingWavWriter? = null
     private var currentRecordingFile: File? = null
+    private var currentRecordingFilename: String? = null
 
     init {
         setupBleCallbacks()
@@ -157,13 +164,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         streamStartTime = System.currentTimeMillis()
         isSkippingInitialData = true
 
-        // Set up streaming writer for direct-to-file recording
-        val sessionDir = sessionManager.getCurrentSessionDirectory()
-        if (!sessionDir.exists()) {
-            sessionDir.mkdirs()
-        }
+        // Set up streaming writer to temp directory
         val filename = generateFilename()
-        currentRecordingFile = File(sessionDir, "$filename.wav")
+        currentRecordingFilename = filename
+        currentRecordingFile = File(tempRecordingDir, "$filename.wav")
         streamingWriter = StreamingWavWriter(currentRecordingFile!!).also { writer ->
             if (!writer.open()) {
                 _uiState.value = _uiState.value.copy(
@@ -223,38 +227,54 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // Recording functions
-    fun saveRecording(filename: String? = null): File? {
-        // With streaming mode, the file is already saved during recording
-        val savedFile = currentRecordingFile
+    fun saveRecording(customFilename: String? = null) {
+        val tempFile = currentRecordingFile
 
-        if (savedFile == null || !savedFile.exists() || audioDataHandler.getSampleCount() == 0) {
+        if (tempFile == null || !tempFile.exists() || audioDataHandler.getSampleCount() == 0) {
             _uiState.value = _uiState.value.copy(
                 errorMessage = "No audio data to save"
             )
-            return null
+            return
         }
 
-        // If a custom filename was provided, rename the file
-        if (filename != null) {
-            val newFile = File(savedFile.parent, "$filename.wav")
-            if (savedFile.renameTo(newFile)) {
-                currentRecordingFile = newFile
+        val session = sessionManager.getCurrentSession()
+        val displayName = if (!customFilename.isNullOrBlank()) {
+            "${customFilename.trim()}.wav"
+        } else {
+            "${currentRecordingFilename}.wav"
+        }
+
+        // Save to MediaStore in background
+        viewModelScope.launch {
+            val uri = withContext(Dispatchers.IO) {
+                mediaStoreManager.saveToMediaStore(tempFile, session.id, displayName)
+            }
+
+            if (uri != null) {
+                // Delete temp file after successful save
+                withContext(Dispatchers.IO) {
+                    tempFile.delete()
+                }
+                currentRecordingFile = null
+                currentRecordingFilename = null
+
+                // Reset recording stats
+                audioDataHandler.clear()
+
                 _uiState.value = _uiState.value.copy(
-                    lastSavedFile = newFile,
-                    successMessage = "Saved to ${newFile.name}",
-                    currentSession = sessionManager.getCurrentSession()
+                    lastSavedUri = uri,
+                    successMessage = "Saved to Music/AmuaRecordings/${session.id}/",
+                    currentSession = sessionManager.getCurrentSession(),
+                    sampleCount = 0,
+                    packetCount = 0,
+                    recordingDuration = 0f
                 )
-                return newFile
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = "Failed to save recording"
+                )
             }
         }
-
-        _uiState.value = _uiState.value.copy(
-            lastSavedFile = savedFile,
-            successMessage = "Saved to ${savedFile.name}",
-            currentSession = sessionManager.getCurrentSession()
-        )
-
-        return savedFile
     }
 
     // Session functions
@@ -278,13 +298,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         streamingWriter?.close()
         streamingWriter = null
 
-        // Delete the current recording file if it exists
+        // Delete the current temp recording file if it exists
         currentRecordingFile?.let { file ->
             if (file.exists()) {
                 file.delete()
             }
         }
         currentRecordingFile = null
+        currentRecordingFilename = null
 
         audioDataHandler.clear()
         _uiState.value = _uiState.value.copy(
@@ -301,8 +322,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun clearSuccess() {
         _uiState.value = _uiState.value.copy(successMessage = null)
     }
-
-    fun getRecordingsDirectory(): File = wavFileWriter.getOutputDirectory()
 
     override fun onCleared() {
         super.onCleared()
@@ -337,7 +356,7 @@ data class UiState(
     val sampleCount: Int = 0,
     val packetCount: Int = 0,
     val recordingDuration: Float = 0f,
-    val lastSavedFile: File? = null,
+    val lastSavedUri: Uri? = null,
     val errorMessage: String? = null,
     val successMessage: String? = null,
     val currentSession: Session? = null
