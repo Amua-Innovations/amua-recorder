@@ -23,25 +23,17 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      - name: Cache Android SDK
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.android/build-cache
-            ~/.android/cache
-          key: android-sdk-${{ runner.os }}
-
-      - name: Cache Gradle build
+      - name: Cache Gradle and Android
         uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
+            ~/.android/build-cache
             .gradle
-            app/build
-          key: gradle-build-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', 'gradle.properties') }}
           restore-keys: |
-            gradle-build-${{ runner.os }}-
+            gradle-${{ runner.os }}-
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
@@ -58,10 +50,9 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleRelease
-
-      - name: Rename APK
-        run: mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/AmuaRecorder.apk
+        run: |
+          ./gradlew assembleRelease --build-cache --parallel -x lint -x test
+          mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/AmuaRecorder.apk
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
