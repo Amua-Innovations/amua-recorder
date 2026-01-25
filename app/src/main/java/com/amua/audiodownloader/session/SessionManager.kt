@@ -33,20 +33,28 @@ class SessionManager(private val context: Context) {
      * Get the current active session, creating one if none exists.
      */
     fun getCurrentSession(): Session {
+        // Check if saved session ID differs from cached session (another instance may have changed it)
+        val savedSessionId = prefs.getString(KEY_CURRENT_SESSION_ID, null)
+
         _currentSession?.let { session ->
-            // Apply custom name if set
-            val customName = getSessionName(session.id)
-            return if (customName != null && session.name != customName) {
-                val updated = session.copy(name = customName)
-                _currentSession = updated
-                updated
+            // If the saved ID differs from cached, invalidate cache and reload
+            if (savedSessionId != null && savedSessionId != session.id) {
+                Log.d(TAG, "Session changed externally, reloading from preferences")
+                _currentSession = null
             } else {
-                session
+                // Apply custom name if set
+                val customName = getSessionName(session.id)
+                return if (customName != null && session.name != customName) {
+                    val updated = session.copy(name = customName)
+                    _currentSession = updated
+                    updated
+                } else {
+                    session
+                }
             }
         }
 
         // Try to restore from preferences
-        val savedSessionId = prefs.getString(KEY_CURRENT_SESSION_ID, null)
         if (savedSessionId != null) {
             val sessionDir = File(baseDirectory, savedSessionId)
             if (sessionDir.exists()) {
