@@ -272,14 +272,36 @@ class MainActivity : AppCompatActivity() {
         binding.discardButton.isEnabled = hasRecording
     }
 
+    private var lastSessionId: String? = null
+    private var cachedSessionInfo: String = ""
+    private var lastSavedUri: Uri? = null
+
     private fun updateSessionUi(state: UiState) {
         state.currentSession?.let { session ->
             binding.sessionNameText.text = session.name
-            val count = session.getRecordingCount(this)
-            binding.sessionInfoText.text = "$count recording${if (count != 1) "s" else ""} • ${session.getFormattedSize(this)}"
+
+            // Check if we need to refresh the cache:
+            // - Session changed
+            // - A new recording was saved (lastSavedUri changed)
+            // - Cache is empty
+            // But never query MediaStore while streaming (too expensive)
+            val needsRefresh = session.id != lastSessionId ||
+                    state.lastSavedUri != lastSavedUri ||
+                    cachedSessionInfo.isEmpty()
+
+            if (!state.isStreaming && needsRefresh) {
+                lastSessionId = session.id
+                lastSavedUri = state.lastSavedUri
+                val count = session.getRecordingCount(this)
+                cachedSessionInfo = "$count recording${if (count != 1) "s" else ""} • ${session.getFormattedSize(this)}"
+            }
+            binding.sessionInfoText.text = cachedSessionInfo
         } ?: run {
             binding.sessionNameText.text = "No session"
             binding.sessionInfoText.text = ""
+            lastSessionId = null
+            cachedSessionInfo = ""
+            lastSavedUri = null
         }
     }
 
