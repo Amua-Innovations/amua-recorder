@@ -93,8 +93,33 @@ class MainActivity : AppCompatActivity() {
                 manualCheckForUpdates()
                 true
             }
+            R.id.action_about -> {
+                showAboutDialog()
+                true
+            }
             else -> super.onOptionsItemSelected(item)
         }
+    }
+
+    private fun showAboutDialog() {
+        val packageInfo = packageManager.getPackageInfo(packageName, 0)
+        val versionName = packageInfo.versionName ?: "Unknown"
+        val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            packageInfo.longVersionCode
+        } else {
+            @Suppress("DEPRECATION")
+            packageInfo.versionCode.toLong()
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("AmuaRecorder")
+            .setMessage(
+                "Version: $versionName ($versionCode)\n\n" +
+                "Audio recording app for Amua devices.\n\n" +
+                "© Amua Innovations"
+            )
+            .setPositiveButton("OK", null)
+            .show()
     }
 
     private fun setupRecyclerView() {
