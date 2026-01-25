@@ -273,4 +273,41 @@ class MediaStoreManager(private val context: Context) {
             false
         }
     }
+
+    /**
+     * Rename a session's folder by updating the RELATIVE_PATH of all its recordings.
+     *
+     * @param oldSessionId The current session ID (folder name)
+     * @param newFolderName The new folder name
+     * @return True if all recordings were renamed successfully
+     */
+    fun renameSessionFolder(oldSessionId: String, newFolderName: String): Boolean {
+        val recordings = getRecordingsForSession(oldSessionId)
+        if (recordings.isEmpty()) {
+            Log.d(TAG, "No recordings to rename for session $oldSessionId")
+            return true
+        }
+
+        val newRelativePath = "${Environment.DIRECTORY_MUSIC}/$BASE_FOLDER/$newFolderName"
+        var successCount = 0
+
+        for (recording in recordings) {
+            try {
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.Audio.Media.RELATIVE_PATH, newRelativePath)
+                }
+                val updated = contentResolver.update(recording.uri, contentValues, null, null)
+                if (updated > 0) {
+                    successCount++
+                } else {
+                    Log.w(TAG, "Failed to update path for ${recording.displayName}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error renaming ${recording.displayName}", e)
+            }
+        }
+
+        Log.i(TAG, "Renamed $successCount/${recordings.size} recordings from $oldSessionId to $newFolderName")
+        return successCount == recordings.size
+    }
 }

@@ -247,7 +247,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // Save to MediaStore in background
         viewModelScope.launch {
             val uri = withContext(Dispatchers.IO) {
-                mediaStoreManager.saveToMediaStore(tempFile, session.id, displayName)
+                mediaStoreManager.saveToMediaStore(tempFile, session.folderName, displayName)
             }
 
             if (uri != null) {
@@ -263,7 +263,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 _uiState.value = _uiState.value.copy(
                     lastSavedUri = uri,
-                    successMessage = "Saved to Music/AmuaRecordings/${session.id}/",
+                    successMessage = "Saved to Music/AmuaRecordings/${session.folderName}/",
                     currentSession = sessionManager.getCurrentSession(),
                     sampleCount = 0,
                     packetCount = 0,

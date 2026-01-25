@@ -13,7 +13,8 @@ import java.util.Locale
 data class Session(
     val id: String,
     val name: String,
-    val createdAt: Date
+    val createdAt: Date,
+    val folderName: String = id  // The folder name in MediaStore (may differ from id after rename)
 ) {
     companion object {
         private val DATE_FORMAT = SimpleDateFormat("yyyy-MM-dd_HHmmss", Locale.US)
@@ -55,7 +56,7 @@ data class Session(
      */
     fun getRecordings(context: Context): List<MediaStoreManager.MediaStoreRecording> {
         val mediaStoreManager = MediaStoreManager(context)
-        return mediaStoreManager.getRecordingsForSession(id)
+        return mediaStoreManager.getRecordingsForSession(folderName)
     }
 
     /**
