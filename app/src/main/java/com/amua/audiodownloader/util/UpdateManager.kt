@@ -28,9 +28,7 @@ class UpdateManager(private val context: Context) {
         private const val PREFS_NAME = "update_prefs"
         private const val PREF_SKIPPED_VERSION = "skipped_version"
         private const val PREF_LAST_AUTO_CHECK_TIME = "last_auto_check_time"
-        private const val PREF_LAST_MANUAL_CHECK_TIME = "last_manual_check_time"
         private const val AUTO_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000L // 4 hours
-        private const val MANUAL_CHECK_INTERVAL_MS = 60 * 60 * 1000L // 1 hour
     }
 
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -58,25 +56,25 @@ class UpdateManager(private val context: Context) {
      * Check for updates from GitHub releases.
      * Returns UpdateInfo if an update is available, null otherwise.
      *
-     * @param isManualCheck If true, uses manual check rate limiting (1 hour).
+     * @param isManualCheck If true, no rate limiting is applied.
      *                      If false, uses automatic check rate limiting (4 hours).
      */
     suspend fun checkForUpdates(isManualCheck: Boolean = false): CheckResult = withContext(Dispatchers.IO) {
         try {
-            // Apply rate limiting based on check type
-            val prefKey = if (isManualCheck) PREF_LAST_MANUAL_CHECK_TIME else PREF_LAST_AUTO_CHECK_TIME
-            val intervalMs = if (isManualCheck) MANUAL_CHECK_INTERVAL_MS else AUTO_CHECK_INTERVAL_MS
-            val lastCheck = prefs.getLong(prefKey, 0)
-            val timeSinceLastCheck = System.currentTimeMillis() - lastCheck
+            // Apply rate limiting for automatic checks only (manual checks are always allowed)
+            if (!isManualCheck) {
+                val lastCheck = prefs.getLong(PREF_LAST_AUTO_CHECK_TIME, 0)
+                val timeSinceLastCheck = System.currentTimeMillis() - lastCheck
 
-            if (timeSinceLastCheck < intervalMs) {
-                val minutesRemaining = ((intervalMs - timeSinceLastCheck) / 60000).toInt() + 1
-                Log.d(TAG, "Skipping ${if (isManualCheck) "manual" else "auto"} check - $minutesRemaining minutes until next allowed check")
-                return@withContext CheckResult(null, wasRateLimited = true, minutesUntilNextCheck = minutesRemaining)
+                if (timeSinceLastCheck < AUTO_CHECK_INTERVAL_MS) {
+                    val minutesRemaining = ((AUTO_CHECK_INTERVAL_MS - timeSinceLastCheck) / 60000).toInt() + 1
+                    Log.d(TAG, "Skipping auto check - $minutesRemaining minutes until next allowed check")
+                    return@withContext CheckResult(null, wasRateLimited = true, minutesUntilNextCheck = minutesRemaining)
+                }
+
+                // Update last auto check time
+                prefs.edit().putLong(PREF_LAST_AUTO_CHECK_TIME, System.currentTimeMillis()).apply()
             }
-
-            // Update last check time
-            prefs.edit().putLong(prefKey, System.currentTimeMillis()).apply()
 
             val url = URL(GITHUB_API_URL)
             val connection = url.openConnection() as HttpURLConnection
