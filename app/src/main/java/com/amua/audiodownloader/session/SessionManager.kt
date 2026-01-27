@@ -41,15 +41,17 @@ class SessionManager(private val context: Context) {
                 Log.d(TAG, "Session changed externally, reloading from preferences")
                 _currentSession = null
             } else {
-                // Apply custom name if set
-                val customName = getSessionName(session.id)
-                return if (customName != null && session.name != customName) {
-                    val updated = session.copy(name = customName)
+                // Always get current name and folder from preferences (may have been renamed)
+                val currentName = getSessionName(session.id) ?: session.id
+                val currentFolder = getSessionFolderName(session.id)
+
+                // Update cache if name or folder changed
+                if (session.name != currentName || session.folderName != currentFolder) {
+                    val updated = session.copy(name = currentName, folderName = currentFolder)
                     _currentSession = updated
-                    updated
-                } else {
-                    session
+                    return updated
                 }
+                return session
             }
         }
 

@@ -83,6 +83,16 @@ class AmuaBleManager(context: Context) : BleManager(context) {
     }
 
     /**
+     * Called when the device disconnects (both expected and unexpected).
+     */
+    override fun onDeviceDisconnected(device: BluetoothDevice, reason: Int) {
+        super.onDeviceDisconnected(device, reason)
+        Log.i(TAG, "Device disconnected: ${device.address}, reason: $reason")
+        // Notify callback of disconnection (handles unexpected disconnects like device power off)
+        connectionStateCallback?.invoke(false)
+    }
+
+    /**
      * Send START command to begin audio streaming.
      */
     fun startStream(callback: ((Boolean) -> Unit)? = null) {
@@ -147,10 +157,15 @@ class AmuaBleManager(context: Context) : BleManager(context) {
      * Disconnect from the current device.
      */
     fun disconnectDevice() {
+        if (!isConnected) {
+            Log.d(TAG, "Already disconnected")
+            connectionStateCallback?.invoke(false)
+            return
+        }
         disconnect()
             .done {
                 Log.i(TAG, "Disconnected")
-                connectionStateCallback?.invoke(false)
+                // Note: connectionStateCallback is also called in onDeviceDisconnected
             }
             .enqueue()
     }
